@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Supernal AI — Brownsville Prep · Post-Discovery Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #FAFAFA; overflow-y: auto; }
+  #root { min-height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #FAFAFA; }
+  ::-webkit-scrollbar-thumb { background: #E5E5E3; border-radius: 3px; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const C = {
+  bg:"#FFFFFF", bg2:"#FAFAFA", sf:"#F5F5F3", bd:"#E5E5E3",
+  accent:"#E3EB84", black:"#1A1A1A", dark:"#020817",
+  gray:"#6B7280", gl:"#9CA3AF",
+  red:"#DC2626", rl:"#FEF2F2",
+  amber:"#D97706", al:"#FFFBEB",
+  green:"#16A34A", gnl:"#F0FDF4",
+  blue:"#2563EB", bll:"#EFF6FF",
+  purple:"#7C3AED", pl:"#F5F3FF",
+  teal:"#0891B2", tl:"#ECFEFF",
+};
+const H="'Playfair Display',Georgia,serif";
+const B="'Inter',system-ui,sans-serif";
+const M="'JetBrains Mono',monospace";
+
+// ═══════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════
+
+const DOMAINS = [
+  {
+    id:"parent", label:"Parent Communication", tag:"PC", color:C.teal, bg:C.tl, sopCount:"New",
+    overview:"The single highest-impact area surfaced during discovery. Parents contact BPI through phone, text, email, and ProCare Parent Connect — often with repetitive questions that don't need a human (pickup times, dress days, sick notifications). Currently, unanswered calls on the Metronet system forward to Rita's personal phone. Dylan, Courtney, and Rita field 3+ simultaneous calls on practically one line. Amir proposed replacing this with an AI voice receptionist and a centralized Brownsville SMS number — parents get immediate answers from the agent, and only escalate to a human when they specifically ask. Rita also asked about a parent portal on the website for self-service access to announcements, schedules, and policies.",
+    workflows:[
+      {name:"Inbound Voice", flow:"Parent calls → Voice agent answers → Resolves from knowledge base → Escalates only on request", platforms:"Voice vendor · Metronet (fallback)"},
+      {name:"Inbound SMS", flow:"Parent texts Brownsville number → Agent responds from context → Logs notification internally if needed", platforms:"SMS vendor · Knowledge base"},
+      {name:"Info Reception", flow:"Sick day / late pickup / schedule change → Agent acknowledges → Notifies staff internally", platforms:"Voice/SMS · Email/Dashboard alert"},
+      {name:"Parent Portal", flow:"Parent logs into website → Views announcements, schedules, policies → Submits questions", platforms:"brownsvilleprep.com · ProCare data"},
+    ],
+  },
+  {
+    id:"hr", label:"Human Resources", tag:"HR", color:C.blue, bg:C.bll, sopCount:"14 SOPs",
+    overview:"The largest SOP cluster — covering the full employee lifecycle across six disconnected systems. A single hire touches CareerPlug (posting/applications), Monday.com (pipeline tracking), Cal.com (interview scheduling), PDF Filler (offer signing), ProCare (employee records), and ADP (payroll). None of these systems talk to each other — progress is tracked manually. Compliance is high-stakes: Florida DCF requires background clearance before unsupervised work with children, 45 hours of training within 90 days, and completion within one year. Current onboarding has no automated trigger — it relies on someone remembering to start the process.",
+    workflows:[
+      {name:"Hiring Pipeline", flow:"Post opening → Screen applications → Schedule interview → Conduct → Offer → Background check → Onboard → Payroll", platforms:"CareerPlug → Monday.com → Cal.com → PDF Filler → DCF → ProCare → ADP"},
+      {name:"Staff Compliance", flow:"Collect DCF docs → Background screening → Track 45hr training (90d / 1yr) → Monitor cert renewals", platforms:"Monday.com · DCF Portal · Background vendor"},
+      {name:"Onboarding Docs", flow:"Child Abuse Ack → Good Moral Character → E-Verify → Employment history → ProCare record", platforms:"CognitoForms · E-Verify · ProCare"},
+    ],
+  },
+  {
+    id:"enrollment", label:"Enrollment & Admissions", tag:"EN", color:C.purple, bg:C.pl, sopCount:"1 SOP (12 sections)",
+    overview:"Enrollment operates on an annual cycle managed almost entirely through Monday.com. In January, current families receive re-enrollment invitations via automations. In February–March, new families apply through CognitoForms — each application goes through a dual review (Business Office for financial risk + Instructional team for academic fit), both must approve before a shadow day is scheduled via Cal.com. After a successful shadow, the family signs a contract with a $500 deposit. Document compliance monitoring continues year-round. Dylan confirmed Monday.com handles the full pipeline and sends automated reminders at each stage.",
+    workflows:[
+      {name:"Re-Enrollment (Jan)", flow:"Monday.com sends invite → Parent completes contract → Admin reviews → Approve → Doc compliance year-long", platforms:"Monday.com · CognitoForms · Document storage"},
+      {name:"New Student Pipeline", flow:"Interest meeting → Application + $125 fee → Dual review → Shadow day (8:30–11:30) → Capacity check → Contract + $500", platforms:"CognitoForms → Monday.com → Cal.com → Admin"},
+    ],
+  },
+  {
+    id:"billing", label:"Parent Accounts & Billing", tag:"PA", color:C.green, bg:C.gnl, sopCount:"4 SOPs",
+    overview:"The revenue backbone. Two draft cycles per month (3rd and 17th). Wanda posts contract billing to ProCare, adds variable charges manually, and the Business Manager reviews every statement before distribution. Parents pay via ACH ($2) or credit card (2.95%) through MyProCare. Failed drafts trigger a $35 decline fee and daily follow-up, though the school works with families who communicate. Scholarship offsets from two programs (ELC and Step Up) add complexity — each has different timing and portals. Reconciliation happens manually across ProCare, QuickBooks, and bank statements. Rita specifically flagged frustration with QuickBooks: she's sending bank statements to a bookkeeper manually and wants on-demand P&L visibility.",
+    workflows:[
+      {name:"Billing Cycle (2x/month)", flow:"Post contract billing → Add manual charges → Business Manager reviews → Send statements → Execute draft", platforms:"ProCare → ProCare → Manual → ProCare/Email → MyProCare"},
+      {name:"Payment Follow-up", flow:"$35 decline fee → Daily balance check → Phone/email parent → Late fees → Admin suspension", platforms:"ProCare · Phone · Email"},
+      {name:"Scholarship Offset", flow:"ELC funding applied (VPK, School Readiness) → Step Up credits (FTC, EO, UA) → Net balance", platforms:"ELC Portal · EMA Portal · ProCare"},
+    ],
+  },
+  {
+    id:"compliance", label:"Compliance & Regulatory", tag:"CR", color:C.red, bg:C.rl, sopCount:"4 SOPs",
+    overview:"Five regulatory domains, each with different cadences and portals, all tracked mentally by the operator. Monthly: QPS roster submission to the Early Learning Coalition. Quarterly: Step Up scholarship invoicing through the EMA portal — with a parent acceptance bottleneck that blocks revenue. Annually: DOE compliance survey (missing it risks private school status). Continuously: staff training certifications (CPR, First Aid, DCF 45-hour). No unified compliance dashboard exists. Monday.com has a compliance calendar and task list, but it's not fully automated. Dylan uses it for weekly/bi-weekly/monthly tracking. The VPK credit calculation is formula-based and currently manual.",
+    workflows:[
+      {name:"Monthly QPS Roster", flow:"ELC email notification → Login to QPS portal → Verify staff roster → Submit → Mark complete", platforms:"Gmail · QPS Portal · Monday.com"},
+      {name:"Step Up Invoicing (Quarterly)", flow:"Award doc → EMA enrollment → Parent accepts → Weekly invoice check (Fridays) → Remittance → Reconciliation", platforms:"EMA Portal · Parent · Gmail · QuickBooks · Bank"},
+      {name:"Annual DOE Survey", flow:"Deadline trigger → Prep demographics + enrollment data → Complete survey → Submit", platforms:"Calendar · Internal data · FL DOE Portal"},
+      {name:"Staff Training", flow:"Track CPR/First Aid certs → Monitor DCF 45hr training → Flag expirations → Escalate renewals", platforms:"Monday.com · Training vendor · Email"},
+    ],
+  },
+  {
+    id:"finance", label:"Scholarships & Revenue", tag:"FN", color:C.amber, bg:C.al, sopCount:"1 SOP",
+    overview:"Step Up scholarship flow: parent provides award documentation, admin enrolls in EMA portal by Award ID and program type, parent must accept enrollment (recurring bottleneck), invoices release weekly (admin checks Fridays), remittance arrives by email, staff records in a tracking spreadsheet, Business Manager verifies against bank deposits. Three scholarship types behave differently: FTC/FES-EO often below tuition max, UA close to max, VPK pays after VPK funding applied. The entire reconciliation chain is manual — spreadsheet to QuickBooks to bank statement.",
+    workflows:[
+      {name:"Step Up Revenue Pipeline", flow:"Award doc → EMA enrollment → Parent accepts → Weekly invoice check → Remittance → Spreadsheet → QuickBooks reconciliation", platforms:"EMA Portal · Parent · Gmail · Spreadsheet · QuickBooks · Bank"},
+    ],
+  },
+  {
+    id:"accounting", label:"Accounting", tag:"AC", color:"#8B5CF6", bg:"#F5F3FF", sopCount:"0 SOPs",
+    overview:"The largest gap. The accounting department folder exists but contains zero documented procedures. Financial processes — expense tracking, vendor payments, payroll reconciliation, budget reporting — happen through informal routines. Rita flagged that she's unhappy with how they use QuickBooks: bank statements are sent to a bookkeeper manually, and she can't get a P&L on demand. The system will monitor financial signals across email inboxes and surface them in the dashboard. As procedures get documented through the engagement, the system will incorporate them.",
+    workflows:[
+      {name:"Financial Signal Monitoring", flow:"Financial emails across 3 inboxes → AI classification → Dashboard surfacing", platforms:"Gmail · Dashboard"},
+      {name:"Vendor & Invoice Tracking", flow:"Vendor invoices via email → Categorize → Track follow-up", platforms:"Gmail · QuickBooks"},
+      {name:"Payroll Reconciliation", flow:"ADP notifications → Bank deposit verification → QuickBooks reconciliation", platforms:"ADP · Bank · QuickBooks"},
+    ],
+  },
+];
+
+const SYSTEMS = [
+  {name:"Gmail (3 inboxes)", phase:1, access:"Google API", color:C.green, items:["ADMIN@ — licensing, DOE, ELC, regulatory", "Business@ — parents, SUFS/EMA, vendors, HR", "RBrown@ — founder, escalations, strategic"]},
+  {name:"Google Calendar", phase:1, access:"Google API", color:C.green, items:["Compliance deadlines, interview scheduling", "Event-based preparation triggers"]},
+  {name:"Monday.com", phase:1, access:"Public API", color:C.green, items:["Moved to Phase 1 — Amir confirmed API availability", "Recruitment pipeline, enrollment workflow, compliance calendar", "Document tracking with automated expiration reminders", "Free tier"]},
+  {name:"Cal.com", phase:1, access:"Webhook", color:C.green, items:["Interview + shadow day scheduling", "Automated day-of reminders via Monday.com"]},
+  {name:"Voice Agent", phase:1, access:"Vendor", color:C.green, items:["Replaces Metronet phone forwarding", "AI receptionist: resolves routine queries, receives info, escalates on request"]},
+  {name:"SMS Agent", phase:1, access:"Vendor", color:C.green, items:["Dedicated Brownsville text number", "Replaces informal personal phone texting", "Auto-responds from knowledge base, logs inbound notifications"]},
+  {name:"ProCare", phase:2, access:"RPA viable", color:C.amber, items:["Student records, billing, parent ledger, staff records", "ProCare Parent Connect: staff-parent messaging", "No public API — Dylan confirmed Power Automate works for report exports", "Headless browser / RPA approach for data extraction"]},
+  {name:"ADP / CareerPlug", phase:2, access:"No API", color:C.amber, items:["Payroll, HR, talent acquisition", "Phase 1: email signal proxy"]},
+  {name:"QPS Portal", phase:2, access:"No API", color:C.red, items:["Monthly staff roster submission (ELC)", "Manual login required — email triggers tracked"]},
+  {name:"EMA Portal", phase:2, access:"No API", color:C.red, items:["Step Up scholarship invoicing + enrollment", "Parent acceptance required in-portal", "Remittance advice via email"]},
+  {name:"QuickBooks Online", phase:2, access:"API available", color:C.amber, items:["Bank reconciliation, financial reporting", "Rita wants automatic input + on-demand P&L", "Dylan has access — API integration feasible"]},
+  {name:"CognitoForms", phase:2, access:"Form data", color:C.amber, items:["DCF employment applications", "Parent questionnaires (preschool + school-age)"]},
+];
+
+// ═══════════════════════════════════════════
+// COMPONENTS
+// ═══════════════════════════════════════════
+
+function Tag({children, color=C.black}) {
+  return <span style={{background:color+"0C", border:`1px solid ${color}22`, color, padding:"3px 10px", borderRadius:100, fontSize:11, fontWeight:500, fontFamily:B, whiteSpace:"nowrap"}}>{children}</span>;
+}
+
+function Label({children}) {
+  return <div style={{fontSize:11, fontWeight:600, fontFamily:B, letterSpacing:"0.08em", color:C.gl, textTransform:"uppercase", marginBottom:8}}>{children}</div>;
+}
+
+// ═══════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════
+
+function OverviewView() {
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:16}}>
+
+      {/* ── Headline ── */}
+      <div style={{padding:"4px 0"}}>
+        <h2 style={{fontFamily:H, fontSize:28, color:C.black, fontWeight:400, margin:"0 0 10px", lineHeight:1.25}}>
+          Post-Discovery Summary
+        </h2>
+        <p style={{fontFamily:B, fontSize:13, color:C.gray, lineHeight:1.7, margin:0, maxWidth:760}}>
+          Brownsville Prep is a 20-year-old childcare center running on institutional knowledge, email, and phone calls. Rita holds the entire operation in her head — hiring, billing, compliance, parent communications, and scholarships — supported by Dylan and Courtney across disconnected systems. The vision: systematize everything Rita knows into an intelligent layer that runs autonomously, and make it franchise-replicable. During discovery, the parent communication touchpoint emerged as far more critical than the original SOW suggested — it's where the most immediate burden reduction exists.
+        </p>
+      </div>
+
+      {/* ── Objectives ── */}
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12}}>
+        {[
+          {n:"01", t:"Operator Independence", d:"Rita should only handle decisions that require her judgment. Everything else — triage, routing, reminders, tracking, reporting — is automated."},
+          {n:"02", t:"Systematize & Monitor", d:"Every operational workflow — compliance, billing, hiring, enrollment, parent communications — encoded into a monitored, alerting system."},
+          {n:"03", t:"Brownsville in a Box", d:"The entire operating model — processes, knowledge, intelligence — packaged for franchise replication through configuration."},
+        ].map(o=>(
+          <div key={o.n} style={{background:C.bg, border:`1px solid ${C.bd}`, borderRadius:12, padding:"20px 22px", borderTop:`3px solid ${C.accent}`}}>
+            <div style={{fontFamily:B, fontSize:10, fontWeight:700, color:C.gl, letterSpacing:"0.1em", marginBottom:8}}>{o.n}</div>
+            <div style={{fontFamily:H, fontSize:17, color:C.black, marginBottom:8, lineHeight:1.3}}>{o.t}</div>
+            <div style={{fontFamily:B, fontSize:12, color:C.gray, lineHeight:1.55}}>{o.d}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Key Findings ── */}
+      <div style={{background:C.bg, border:`1px solid ${C.bd}`, borderRadius:12, padding:"20px 24px"}}>
+        <Label>Key Findings from Discovery</Label>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 20px", marginTop:4}}>
+          {[
+            {icon:"📞", title:"Voice & text is the highest-traffic channel", text:"Parents call and text more than they email. Routine questions don't need a human. Amir proposed an AI receptionist + dedicated SMS number."},
+            {icon:"🔗", title:"Monday.com is more central than the SOW showed", text:"Recruitment, enrollment, document compliance, and compliance calendar all live in Monday.com. Moved to Phase 1."},
+            {icon:"🔒", title:"ProCare is automatable without an API", text:"Dylan confirmed Power Automate runs reports. Headless browser approach viable. ProCare Parent Connect is an additional messaging channel."},
+            {icon:"💰", title:"QuickBooks is underutilized", text:"Rita wants automatic input and on-demand P&L. Currently sending bank statements to a bookkeeper. QuickBooks Online API is available."},
+            {icon:"🌐", title:"Parent portal is a new request", text:"Rita asked about a website portal where parents can self-serve announcements, schedules, and policies."},
+            {icon:"🧠", title:"All institutional knowledge lives with Rita", text:"'I have been able to do everything just by keeping it in my brain.' The system must capture what's in her head."},
+          ].map((f,i)=>(
+            <div key={i} style={{display:"flex", gap:10, alignItems:"flex-start", padding:"10px 12px", background:C.sf, borderRadius:8}}>
+              <span style={{fontSize:18, flexShrink:0, marginTop:1}}>{f.icon}</span>
+              <div>
+                <div style={{fontFamily:B, fontSize:12, fontWeight:600, color:C.black, marginBottom:3}}>{f.title}</div>
+                <div style={{fontFamily:B, fontSize:11, color:C.gray, lineHeight:1.5}}>{f.text}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Scope Deliverables ── */}
+      <div style={{background:C.bg, border:`1px solid ${C.bd}`, borderRadius:12, padding:"22px 26px"}}>
+        <Label>Scope Deliverables</Label>
+        <p style={{fontFamily:B, fontSize:12, color:C.gray, lineHeight:1.6, margin:"0 0 16px"}}>
+          Everything the system needs to do, prioritized by impact. Updated to reflect what we learned on the call.
+        </p>
+        <div style={{display:"grid", gap:8}}>
+          {[
+            {
+              name:"Parent Voice & SMS Agent",
+              priority:"HIGHEST IMPACT", pc:"#0891B2",
+              why:"Replaces Metronet phone forwarding with an AI receptionist + dedicated SMS number. Handles the highest-traffic touchpoint: routine queries, sick notifications, late pickups, schedule questions. Only escalates when a parent requests a human. Dylan confirmed this would be 'a huge lift of burden.'",
+            },
+            {
+              name:"Founder Command Center",
+              priority:"HIGH LEVERAGE", pc:C.accent,
+              why:"Single operational view — urgency, compliance status, HR pipeline, parent health, financial signals. Every other deliverable feeds into this. It's how Rita transitions from manual oversight to decision-making. Could extend to a parent-facing portal on the website.",
+            },
+            {
+              name:"Email Intelligence Engine",
+              priority:"FOUNDATION", pc:C.accent,
+              why:"Ingests all three Gmail inboxes. Classifies every email against SOPs, scores urgency, extracts entities, routes to the right workflow. The classification pipeline that powers the dashboard, briefing, and compliance engine.",
+            },
+            {
+              name:"Compliance Monitoring Engine",
+              priority:"RISK MITIGATION", pc:"#DC2626",
+              why:"Tracks deadlines across DOE (annual), ELC (monthly), SUFS (quarterly), and staff training (continuous). Missing a deadline risks licensing and scholarship eligibility. Countdown alerts at configurable intervals. VPK credit auto-calculation.",
+            },
+            {
+              name:"Daily AI Leadership Briefing",
+              priority:"IMMEDIATE VALUE", pc:C.accent,
+              why:"Replaces Rita's morning email and phone scan. Delivered by 6 AM — today's schedule, urgent issues, compliance risks, HR updates, parent flags, and a prioritized decision queue.",
+            },
+            {
+              name:"Parent Communication Orchestration",
+              priority:"REVENUE PROTECTION", pc:"#D97706",
+              why:"Tracks all parent touchpoints — voice, SMS, email, ProCare Parent Connect. Monitors response times, detects escalation risks, flags billing disputes. Centralizes what is currently fragmented across personal phones and apps.",
+            },
+            {
+              name:"Workflow & Pipeline Automation",
+              priority:"OPERATIONAL", pc:C.blue,
+              why:"Reads and writes to Monday.com for recruitment, enrollment, and compliance tasks. Monitors billing cycles via ProCare (RPA). Tracks scholarship revenue pipeline. Flags stalled applications, unsigned offers, missing documents, overdue training.",
+            },
+            {
+              name:"Calendar Intelligence",
+              priority:"SUPPORTING", pc:C.gl,
+              why:"Google Calendar + Monday.com compliance calendar. Overlays deadlines, detects conflicts, generates preparation checklists. Feeds into dashboard and daily briefing.",
+            },
+            {
+              name:"Parent Portal (Website)",
+              priority:"NEW REQUEST", pc:"#0891B2",
+              why:"Rita requested a logged-in section of brownsvilleprep.com where parents access announcements, schedules, and policies. Reduces inbound calls and texts by giving parents self-service information.",
+            },
+            {
+              name:"Financial Intelligence",
+              priority:"OPPORTUNITY", pc:"#8B5CF6",
+              why:"Accounting has zero SOPs. Rita wants QuickBooks integration for real-time P&L. System monitors financial signals across email and surfaces them. Procedures documented through the engagement get incorporated.",
+            },
+            {
+              name:"Admin Configuration",
+              priority:"OPERATIONAL", pc:C.gl,
+              why:"Interface where BPI adjusts SLA parameters, classification rules, SOP deadlines, and alert preferences without Supernal involvement. Long-term ownership.",
+            },
+          ].map((d,i)=>(
+            <div key={i} style={{display:"flex", gap:14, alignItems:"flex-start", padding:"12px 14px", background:C.sf, borderRadius:10, border:`1px solid ${C.bd}`}}>
+              <div style={{flex:"0 0 210px"}}>
+                <div style={{fontFamily:B, fontSize:13, fontWeight:600, color:C.black, marginBottom:3}}>{d.name}</div>
+                <span style={{fontFamily:B, fontSize:9, fontWeight:700, letterSpacing:"0.08em", color:d.pc, textTransform:"uppercase"}}>{d.priority}</span>
+              </div>
+              <div style={{fontFamily:B, fontSize:12, color:C.gray, lineHeight:1.55}}>{d.why}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Proposed AI Employees ── */}
+      <div style={{background:C.black, borderRadius:12, padding:"24px 28px"}}>
+        <Label><span style={{color:C.accent}}>Proposed AI Employees</span></Label>
+        <p style={{fontFamily:B, fontSize:13, color:"rgba(255,255,255,0.55)", lineHeight:1.65, margin:"0 0 20px", maxWidth:720}}>
+          We propose structuring the deliverables above as three AI employees — each one owns a domain, operates on the platform layers, and delivers measurable outcomes. This is how Supernal segments work for commercial terms and delivery.
+        </p>
+        <div style={{display:"grid", gap:12}}>
+          {[
+            {
+              name:"BPI Receptionist",
+              desc:"Parent-facing communication agent",
+              color:C.teal,
+              owns:"Voice calls · SMS texts · Parent portal · ProCare Parent Connect",
+              delivers:"Parent Voice & SMS Agent · Parent Communication Orchestration · Parent Portal",
+              does:"Handles all inbound parent communication. Resolves routine queries from knowledge base, receives notifications (sick days, late pickups), routes information to staff, and escalates to a human only on request. Replaces Metronet forwarding. Gives parents a dedicated Brownsville number.",
+              outcome:"Eliminate 80%+ of inbound calls and texts that don't require a human. Rita's phone stops ringing for routine items.",
+            },
+            {
+              name:"BPI Operations Intelligence",
+              desc:"Internal monitoring and classification engine",
+              color:C.accent,
+              owns:"Email intelligence · Compliance tracking · Calendar intelligence · Daily briefing · Founder Command Center",
+              delivers:"Email Intelligence Engine · Compliance Monitoring Engine · Daily Briefing · Calendar Intelligence · Founder Command Center · Admin Configuration",
+              does:"Ingests all three Gmail inboxes and Google Calendar. Classifies every signal against SOPs. Tracks compliance deadlines with countdown alerts. Generates the 6 AM briefing. Surfaces everything in a single dashboard. VPK credit auto-calculation.",
+              outcome:"Zero missed compliance deadlines. One screen instead of five portals. Daily triage replaced by automated briefing.",
+            },
+            {
+              name:"BPI Workflow Orchestrator",
+              desc:"Pipeline and process automation engine",
+              color:C.blue,
+              owns:"Monday.com pipelines · Hiring flow · Enrollment flow · Billing monitoring · Scholarship tracking",
+              delivers:"Workflow & Pipeline Automation · Financial Intelligence",
+              does:"Reads and writes to Monday.com for recruitment, enrollment, and compliance. Monitors ProCare billing cycles via RPA. Tracks Step Up scholarship pipeline end-to-end. Flags stalled processes. Integrates QuickBooks for financial visibility as SOPs are documented.",
+              outcome:"HR pipeline visible end-to-end. Applications don't stall. Billing follow-up systematic. Scholarship revenue protected.",
+            },
+          ].map((emp,i)=>(
+            <div key={i} style={{background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"18px 22px", borderLeft:`3px solid ${emp.color}`}}>
+              <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
+                <div style={{fontFamily:H, fontSize:17, color:"#fff"}}>{emp.name}</div>
+                <span style={{fontFamily:B, fontSize:10, color:emp.color}}>{emp.desc}</span>
+              </div>
+              <div style={{marginBottom:6}}>
+                <span style={{fontFamily:B, fontSize:9, fontWeight:600, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.06em"}}>Owns: </span>
+                <span style={{fontFamily:M, fontSize:10, color:emp.color}}>{emp.owns}</span>
+              </div>
+              <div style={{marginBottom:8}}>
+                <span style={{fontFamily:B, fontSize:9, fontWeight:600, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.06em"}}>Delivers: </span>
+                <span style={{fontFamily:B, fontSize:10, color:"rgba(255,255,255,0.5)"}}>{emp.delivers}</span>
+              </div>
+              <div style={{fontFamily:B, fontSize:12, color:"rgba(255,255,255,0.6)", lineHeight:1.6, marginBottom:10}}>{emp.does}</div>
+              <div style={{background:emp.color+"15", borderRadius:6, padding:"8px 12px", border:`1px solid ${emp.color}22`}}>
+                <span style={{fontFamily:B, fontSize:10, fontWeight:600, color:emp.color, textTransform:"uppercase", letterSpacing:"0.06em"}}>Outcome: </span>
+                <span style={{fontFamily:B, fontSize:11, color:"rgba(255,255,255,0.7)"}}>{emp.outcome}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// OPERATIONS
+// ═══════════════════════════════════════════
+
+function OperationsView() {
+  const [expanded, setExpanded] = useState(null);
+  return (
+    <div>
+      <div style={{marginBottom:20}}>
+        <h2 style={{fontFamily:H, fontSize:24, color:C.black, fontWeight:400, margin:"0 0 8px"}}>Operational Domains</h2>
+        <p style={{fontFamily:B, fontSize:13, color:C.gray, lineHeight:1.6, margin:0}}>Seven domains the system needs to cover. Each contains the workflows we've mapped, the systems involved, and our understanding of how the process works today.</p>
+      </div>
+      <div style={{display:"grid", gap:8}}>
+        {DOMAINS.map(d=>{
+          const isOpen = expanded === d.id;
+          return (
+            <div key={d.id} onClick={()=>setExpanded(isOpen?null:d.id)} style={{background:C.bg, border:`1px solid ${isOpen?d.color+"44":C.bd}`, borderRadius:12, padding:"16px 20px", cursor:"pointer", transition:"all 0.15s"}}>
+              <div style={{display:"flex", alignItems:"center", gap:12}}>
+                <div style={{width:36, height:36, borderRadius:8, background:d.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:B, fontSize:11, fontWeight:700, color:d.color}}>{d.tag}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:H, fontSize:17, color:C.black}}>{d.label}</div>
+                  <div style={{display:"flex", gap:6, marginTop:4, flexWrap:"wrap"}}>
+                    <Tag color={d.color}>{d.sopCount}</Tag>
+                  </div>
+                </div>
+                <span style={{color:C.gl, fontSize:18, transform:isOpen?"rotate(90deg)":"none", transition:"transform 0.15s"}}>›</span>
+              </div>
+              {isOpen && (
+                <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.bd}`}}>
+                  <Label>How It Works</Label>
+                  <div style={{fontFamily:B, fontSize:12, color:C.dark, lineHeight:1.65, padding:"12px 16px", marginBottom:16, background:C.sf, borderRadius:8, borderLeft:`3px solid ${d.color}`}}>{d.overview}</div>
+                  <Label>Workflows</Label>
+                  <div style={{display:"grid", gap:6}}>
+                    {d.workflows.map((wf,wi)=>(
+                      <div key={wi} style={{background:C.sf, borderRadius:8, padding:"10px 14px", border:`1px solid ${C.bd}`}}>
+                        <div style={{fontFamily:B, fontSize:12, fontWeight:600, color:C.black, marginBottom:4}}>{wf.name}</div>
+                        <div style={{fontFamily:M, fontSize:10, color:C.gray, lineHeight:1.5}}>{wf.flow}</div>
+                        <div style={{marginTop:5, display:"flex", alignItems:"center", gap:6}}>
+                          <span style={{fontFamily:B, fontSize:9, fontWeight:600, color:C.gl, textTransform:"uppercase", letterSpacing:"0.06em"}}>Platforms:</span>
+                          <span style={{fontFamily:M, fontSize:9, color:C.blue}}>{wf.platforms}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// SYSTEMS
+// ═══════════════════════════════════════════
+
+function SystemsView() {
+  const p1 = SYSTEMS.filter(s=>s.phase===1);
+  const p2 = SYSTEMS.filter(s=>s.phase===2);
+  const renderSys = (s) => (
+    <div key={s.name} style={{background:C.bg, border:`1px solid ${C.bd}`, borderRadius:10, padding:"14px 18px", marginBottom:8}}>
+      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8}}>
+        <span style={{fontFamily:H, fontSize:15, color:C.black}}>{s.name}</span>
+        <Tag color={s.color}>{s.access}</Tag>
+      </div>
+      <div style={{display:"grid", gap:3}}>
+        {s.items.map((item,i)=>(
+          <div key={i} style={{display:"flex", gap:8, alignItems:"flex-start"}}>
+            <span style={{color:s.color, fontSize:7, marginTop:5, flexShrink:0}}>●</span>
+            <span style={{fontFamily:B, fontSize:11, color:C.gray, lineHeight:1.5}}>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{marginBottom:20}}>
+        <h2 style={{fontFamily:H, fontSize:24, color:C.black, fontWeight:400, margin:"0 0 8px"}}>Integration Landscape</h2>
+        <p style={{fontFamily:B, fontSize:13, color:C.gray, lineHeight:1.6, margin:0}}>Phase 1 systems have direct API or vendor integration. Phase 2 systems require RPA, email proxy, or future API development.</p>
+      </div>
+      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
+        <div style={{width:8, height:8, borderRadius:4, background:C.green}} />
+        <span style={{fontFamily:B, fontSize:13, fontWeight:600, color:C.black}}>Phase 1 — Direct Access</span>
+      </div>
+      {p1.map(renderSys)}
+      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10, marginTop:20}}>
+        <div style={{width:8, height:8, borderRadius:4, background:C.amber}} />
+        <span style={{fontFamily:B, fontSize:13, fontWeight:600, color:C.black}}>Phase 2 — Proxy / RPA / Deferred</span>
+      </div>
+      {p2.map(renderSys)}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// ARCHITECTURE
+// ═══════════════════════════════════════════
+
+function ArchView() {
+  const platform = [
+    {name:"Ingestion", color:C.blue, desc:"All operational signals — email, voice, SMS, calendar, Monday.com — normalized into one event pipeline.", items:["3 Gmail inboxes via Pub/Sub", "Voice + SMS via vendor APIs", "Monday.com via REST API", "Google Calendar webhooks", "ProCare via RPA (Phase 2)"]},
+    {name:"Classification", color:C.purple, desc:"One pipeline classifies every signal against the SOP registry. Urgency scoring, entity extraction, sentiment analysis, and action routing.", items:["SOP Registry: configurable per procedure", "LLM: classify, score, extract, route", "Tiers: Monitor / Assist / Automate"]},
+    {name:"Compliance", color:C.red, desc:"Deadline tracker with countdown alerts, completion detection from upstream signals, and the VPK credit formula engine.", items:["DOE annual, ELC monthly, SUFS quarterly", "Staff training: 90d / 1yr from hire", "Monday.com compliance calendar sync", "VPK credit calculator"]},
+    {name:"Intelligence", color:C.green, desc:"Founder Command Center, daily briefing, and internal alerting. The read and presentation layer that makes everything visible and actionable.", items:["Dashboard: urgency, compliance, HR, billing, parents", "6 AM daily briefing email", "Internal staff alerts", "Parent portal (website)", "Admin configuration interface"]},
+  ];
+  const employees = [
+    {name:"BPI Receptionist", color:C.teal, reads:"Ingestion (voice, SMS) · Classification (intent routing) · Intelligence (knowledge base)", does:"Handles all parent-facing communication. Resolves routine queries, receives notifications, escalates to humans on request."},
+    {name:"BPI Ops Intelligence", color:C.accent, reads:"Ingestion (email, calendar) · Classification (SOP mapping) · Compliance (deadlines) · Intelligence (dashboard, briefing)", does:"Monitors all internal operations. Classifies signals, tracks compliance, generates briefings, surfaces decisions for Rita."},
+    {name:"BPI Orchestrator", color:C.blue, reads:"Classification (action routing) · Compliance (task triggers) · Intelligence (pipeline status)", does:"Manages workflows across Monday.com, billing cycles, enrollment pipelines, hiring, and scholarship tracking. Takes action on flagged items."},
+  ];
+  return (
+    <div>
+      <div style={{marginBottom:20}}>
+        <h2 style={{fontFamily:H, fontSize:24, color:C.black, fontWeight:400, margin:"0 0 8px"}}>Solution Architecture</h2>
+        <p style={{fontFamily:B, fontSize:13, color:C.gray, lineHeight:1.6, margin:0}}>
+          Layers 1–4 are the platform — they ingest, classify, track, and present. The AI employees operate on top of this platform, each one reading from the layers below and taking actions in their domain.
+        </p>
+      </div>
+
+      {/* Platform Layers */}
+      <Label>Platform Layers (1–4)</Label>
+      <div style={{display:"flex", alignItems:"center", gap:0, marginBottom:12}}>
+        {platform.map((l,i)=>(
+          <div key={i} style={{display:"flex", alignItems:"center", flex:1}}>
+            <div style={{flex:1, background:l.color+"08", border:`1px solid ${l.color}22`, borderRadius:10, padding:"10px 8px", textAlign:"center"}}>
+              <div style={{fontFamily:B, fontSize:9, fontWeight:600, color:l.color, letterSpacing:"0.06em"}}>LAYER {i+1}</div>
+              <div style={{fontFamily:H, fontSize:12, color:C.black}}>{l.name}</div>
+            </div>
+            {i<3 && <span style={{color:C.bd, margin:"0 2px", fontSize:14}}>→</span>}
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid", gap:8, marginBottom:24}}>
+        {platform.map((l,i)=>(
+          <div key={i} style={{background:C.bg, border:`1px solid ${C.bd}`, borderRadius:10, padding:"14px 18px", borderLeft:`3px solid ${l.color}`}}>
+            <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
+              <Tag color={l.color}>Layer {i+1}</Tag>
+              <span style={{fontFamily:H, fontSize:15, color:C.black}}>{l.name}</span>
+            </div>
+            <div style={{fontFamily:B, fontSize:12, color:C.gray, lineHeight:1.5, marginBottom:8}}>{l.desc}</div>
+            <div style={{display:"flex", flexWrap:"wrap", gap:4}}>
+              {l.items.map((item,j)=>(
+                <span key={j} style={{background:C.sf, border:`1px solid ${C.bd}`, borderRadius:6, padding:"4px 10px", fontFamily:B, fontSize:10, color:C.gray}}>{item}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Employee Layer */}
+      <div style={{background:C.black, borderRadius:12, padding:"22px 26px"}}>
+        <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:6}}>
+          <div style={{width:6, height:6, borderRadius:3, background:C.accent}} />
+          <span style={{fontFamily:B, fontSize:11, fontWeight:600, letterSpacing:"0.08em", color:C.accent, textTransform:"uppercase"}}>AI Employee Layer — Operates on Layers 1–4</span>
+        </div>
+        <p style={{fontFamily:B, fontSize:12, color:"rgba(255,255,255,0.5)", lineHeight:1.6, margin:"0 0 16px"}}>
+          Each employee reads from the platform layers and orchestrates actions within its domain. The platform provides the data and intelligence; the employees make decisions and execute.
+        </p>
+        <div style={{display:"grid", gap:10}}>
+          {employees.map((emp,i)=>(
+            <div key={i} style={{background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"16px 20px", borderLeft:`3px solid ${emp.color}`}}>
+              <div style={{fontFamily:H, fontSize:15, color:"#fff", marginBottom:6}}>{emp.name}</div>
+              <div style={{marginBottom:8}}>
+                <span style={{fontFamily:B, fontSize:9, fontWeight:600, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.06em"}}>Reads from: </span>
+                <span style={{fontFamily:M, fontSize:10, color:emp.color}}>{emp.reads}</span>
+              </div>
+              <div style={{fontFamily:B, fontSize:12, color:"rgba(255,255,255,0.6)", lineHeight:1.55}}>{emp.does}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{marginTop:16, background:C.sf, borderRadius:10, padding:"14px 18px", border:`1px solid ${C.bd}`, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+        <div>
+          <span style={{fontFamily:B, fontSize:13, fontWeight:600, color:C.black}}>Build for Brownsville first.</span>
+          <span style={{fontFamily:B, fontSize:13, color:C.gray, marginLeft:8}}>Franchise architecture comes after the single-location system proves out.</span>
+        </div>
+        <Tag color={C.green}>Code-first</Tag>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════
+
+function App() {
+  const [view, setView] = useState("overview");
+  const views = [{id:"overview",l:"Overview"},{id:"operations",l:"Operations"},{id:"systems",l:"Systems"},{id:"architecture",l:"Architecture"}];
+  return (
+    <div style={{background:C.bg2, minHeight:"100vh", fontFamily:B}}>
+      <div style={{background:C.bg, borderBottom:`1px solid ${C.bd}`, padding:"16px 32px", display:"flex", alignItems:"center"}}>
+        <div style={{display:"flex", alignItems:"center", gap:10}}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="3" height="16" rx="1.5" fill={C.black}/><rect x="7" y="7" width="3" height="10" rx="1.5" fill={C.black}/><rect x="12" y="2" width="3" height="20" rx="1.5" fill={C.black}/><rect x="17" y="6" width="3" height="12" rx="1.5" fill={C.black}/></svg>
+          <span style={{fontFamily:B, fontSize:16, fontWeight:700, color:C.black}}>Supernal</span>
+        </div>
+        <div style={{margin:"0 24px", height:20, width:1, background:C.bd}} />
+        <div>
+          <div style={{fontFamily:H, fontSize:17, color:C.black}}>Brownsville Preparatory Institute</div>
+          <div style={{fontFamily:B, fontSize:11, color:C.gl}}>Post-Discovery Architecture · March 2026</div>
+        </div>
+        <div style={{marginLeft:"auto", display:"flex", gap:2, background:C.sf, borderRadius:10, padding:3}}>
+          {views.map(v=>(
+            <button key={v.id} onClick={()=>setView(v.id)} style={{background:view===v.id?C.bg:"transparent", border:view===v.id?`1px solid ${C.bd}`:"1px solid transparent", borderRadius:8, cursor:"pointer", padding:"8px 16px", color:view===v.id?C.black:C.gl, fontSize:12, fontWeight:500, fontFamily:B, boxShadow:view===v.id?"0 1px 3px rgba(0,0,0,0.04)":"none", transition:"all 0.1s"}}>{v.l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:"24px 32px", maxWidth:960, margin:"0 auto"}}>
+        {view==="overview" && <OverviewView />}
+        {view==="operations" && <OperationsView />}
+        {view==="systems" && <SystemsView />}
+        {view==="architecture" && <ArchView />}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
